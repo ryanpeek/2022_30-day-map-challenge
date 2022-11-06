@@ -4,7 +4,6 @@ date-modified: "*Updated `r Sys.Date()`*"
 format: 
   html:
     code-overflow: wrap
-    footer: "[ryanpeek.org](https://ryanpeek.org/)&nbsp;&nbsp;&nbsp;"
     theme: materia
 editor_options: 
   chunk_output_type: console
