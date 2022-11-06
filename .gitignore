@@ -42,10 +42,11 @@ vignettes/*.pdf
 docs/*html
 *html
 
-# quarto sub files
+# quarto sub files and data raw
 docs/*files/*
 data_raw/*gdb
 data_raw/eu_rivers_v10.zip
+data_raw/*pdf
 
 # odds and ends
 ~*.docx
