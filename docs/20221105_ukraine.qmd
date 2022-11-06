@@ -1,0 +1,189 @@
+---
+title: "2022-11-05 Ukraine"
+date-modified: "*Updated `r Sys.Date()`*"
+format: 
+  html:
+    code-overflow: wrap
+    footer: "[ryanpeek.org](https://ryanpeek.org/)&nbsp;&nbsp;&nbsp;"
+    theme: materia
+editor_options: 
+  chunk_output_type: console
+---
+
+30 Day Map Challenge for 2022. See [here](https://30daymapchallenge.com) for info.
+
+## Ukraine (Day 5)
+
+Using Ukraine data, we will explore the topographic roughness and river network.
+
+### Libraries
+
+```{r load-libraries}
+suppressPackageStartupMessages({
+  library(here);
+  library(geodata);
+  library(sf);
+  library(rnaturalearth);
+  library(tmap);
+  library(dplyr);
+  library(terra);
+  library(fs);
+  library(httr);
+  library(viridis);
+})
+```
+
+### Get Data
+
+Grab elevation data for Ukraine and check coordinate ref system and resolution.
+
+```{r get-dem-data}
+#| echo: true
+#| eval: false
+ukr <- geodata::elevation_30s("UKR", path=here(tempdir()))
+class(ukr) # check class
+res(ukr)
+cat(crs(ukr), "\n")
+fs::dir_create("data_raw")
+terra::writeRaster(ukr, file = "data_raw/ukr_elev_30s.tif")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+ukr <- rast(here("data_raw/ukr_elev_30s.tif"))
+
+```
+
+Make a quick plot:
+
+```{r quick-plot}
+#| error: false
+#| message: false
+
+plot(ukr, col=viridis::mako(96))
+title("Ukraine DEM")
+
+```
+
+### Calculate Terrain Indices
+
+First, let's calculate the terrain ruggedness index (*`TPI`*). A measure of the mean of the **absolute** differences between the values of a cell and the surrounding 8 cells. We also calculate aspect and flow direction.
+
+```{r calc-asp}
+# calc terrain ruggedness index: mean 
+ukr_tri <- terrain(ukr, v = "TRI", neighbors=8)
+
+# calc aspect 
+ukr_asp <- terrain(ukr, v = "aspect", neighbors=8)
+
+# calc flowdir
+ukr_flowdir <- terrain(ukr, v = "flowdir", neighbors=8)
+```
+
+::: {layout-ncol=2}
+
+```{r}
+#| echo: false
+#| fig-cap: "Topographic Roughness Index, palette reversed to show roughest areas in blue"
+plot(ukr_tri, col=rev(viridis::cividis(300)))
+
+```
+
+```{r}
+#| echo: false
+#| fig-cap: "Flow Direction"
+plot(ukr_flowdir, col=rev(viridis::mako(300)))
+```
+
+:::
+
+### Get Rivers of Ukraine
+
+Here we download from the `Hydro*` datasets found here: [https://www.hydrosheds.org/products/hydrorivers](https://www.hydrosheds.org/products/hydrorivers)
+
+```{r get-rivers}
+#| eval: false
+# download rivers
+library(httr)
+res <- GET(url = "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_eu.gdb.zip",
+           write_disk("data_raw/eu_rivers_v10.zip"),
+           progress())
+unzip(here("data_raw/eu_rivers_v10.zip"), exdir = "data")
+
+```
+
+```{r crop-rivers}
+#| echo: true
+#| eval: false
+
+# check layers and crs
+st_layers(here("data_raw/HydroRIVERS_v10_eu.gdb"))[1]
+rivs <- st_read(here("data_raw/HydroRIVERS_v10_eu.gdb"), st_layers(here("data_raw/HydroRIVERS_v10_eu.gdb"))[1]$name) 
+st_crs(rivs)
+
+# crop to just ukr
+world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+ukr_sf <- world %>% filter(sov_a3=="UKR") %>% 
+  st_transform(4326)
+st_crs(ukr_sf)
+
+# crop rivers by boundary
+rivs_ukr <- rivs[ukr_sf,]
+
+# fix geometry to s2
+rivs_ukr$geometry <- rivs_ukr$Shape %>%
+   s2::s2_rebuild() %>%
+   sf::st_as_sfc()
+
+# save out
+fs::dir_create(here("data_clean"))
+save(ukr_sf, rivs_ukr, file = here("data_clean/rivers_ukraine.rda"))
+```
+
+```{r load-dat}
+#| eval: true
+#| echo: false
+
+load(here("data_clean/rivers_ukraine.rda"))
+```
+
+
+### Map It All
+
+Now make a final map! Here we include the country border, rivers, and TRI.
+
+::: {.column-page}
+
+```{r tmap}
+#| eval: true
+#| echo: true
+#| message: false
+#| out-width: 110%
+
+# make a col palette for rivers, darker for larger
+blues <- rev(c('#08306b', '#08519c', '#2171b5', '#4292c6', '#6baed6', '#9ecae1', '#c6dbef', '#deebf7'))
+
+library(tmap)
+
+# map
+tm1 <- tm_shape(ukr_tri) + 
+  tm_raster(palette = "-cividis", alpha = 0.96, legend.show = TRUE) +
+  tm_shape(ukr_sf) + 
+  tm_sf(border.col = "gray",lwd = 10, border.lwd = 10, alpha=0)+  
+  tm_shape(rivs_ukr) + tm_lines(col = "ORD_STRA", palette = blues, alpha=1, lwd = "ORD_STRA", legend.lwd.show = FALSE, legend.col.show=FALSE) +
+  tm_credits(fontfamily = "Roboto Condensed", 
+             text = "River data from HydroSHEDS database\n<http://www.hydrosheds.org> WWF (2006-2013)",position = "LEFT")+
+  tm_layout(title.size = 0.5,
+            main.title = "Rivers & Topographic Roughness in Ukraine",
+            fontfamily = "Roboto Condensed")+
+  tm_compass() + tm_scale_bar() +
+  tm_layout(frame = FALSE, 
+            legend.position = c("right","top"))
+  
+print(tm1)
+fs::dir_create("figs")
+tmap::tmap_save(tm1, filename = here("figs/20221105_ukraine_rivers.png"), width = 11, height = 8.5, dpi = 300)
+```
+
+:::
