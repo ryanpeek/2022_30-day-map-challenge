@@ -1,0 +1,278 @@
+---
+title: "2022-11-06 Network"
+date-modified: "*Updated `r Sys.Date()`*"
+format: 
+  html:
+    code-overflow: wrap
+    theme: darkly # slate lux materia sketchy darkly
+editor_options: 
+  chunk_output_type: console
+---
+
+30 Day Map Challenge for 2022. See [here](https://30daymapchallenge.com) for info.
+
+## Network (Day 06)
+
+Flow network
+
+### Libraries
+
+```{r load-libraries}
+suppressPackageStartupMessages({
+  library(here);
+  library(dataRetrieval);
+  library(nhdplusTools);
+  library(mapview);
+  library(terra);
+  library(elevatr);
+  library(sf);
+  library(tmap);
+  library(ggsn);
+  library(dplyr);
+  library(fs);
+  library(purrr);
+  library(glue);
+  library(igraph);
+  library(networkD3);
+  library(viridis);
+})
+```
+
+### Get Data
+
+First get info on what sites have flow info in NV.
+
+```{r get-data}
+#| echo: true
+#| eval: true
+#| message: false
+#| results: hide
+
+library(ggsn)
+# get data on sites 
+NV_sites <- whatNWISsites(stateCd = "NV", 
+                          parameterCd = "00060")
+
+# where?
+nv <- tigris::states(progress_bar = FALSE) %>% filter(NAME=="Nevada")
+
+# make into sf
+nv_sf <- st_as_sf(NV_sites, 
+                  coords = c("dec_long_va", "dec_lat_va"),
+                  crs = 4269, remove=FALSE)
+# map
+ggplot() +
+    geom_sf(data = nv) +
+    geom_sf(data = nv_sf, pch=21, fill="steelblue") + 
+    xlab(NULL)+
+    ylab(NULL)+
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5)) +
+    north(nv_sf, symbol=1, location="bottomleft") +
+    scalebar(nv,
+             dist=100, dist_unit="mi", st.size = 3,
+             transform=TRUE, model="WGS84")
+
+```
+
+Now we can randomly sample 5 gages and pull the stream data for each.
+
+```{r}
+
+set.seed(111)
+
+# randomly grab a gage
+nv_sample <- nv_sf[sample(nrow(nv_sf), 5), ]
+
+# Use the GAGE list
+site_list <- purrr::map(nv_sample$site_no, ~list(featureSource = "nwissite", featureID=glue("USGS-{.x}")))
+
+# Get upstream mainstem streamlines (10 km limit) from gages
+mainstemsUS <- purrr::map(site_list, 
+                          ~navigate_nldi(nldi_feature = .x,
+                                             mode="UT",
+                                             distance_km = 20))
+
+# drop NAs
+mainstemsUS <- mainstemsUS %>% purrr::compact() %>% 
+  set_names(nv_sample$site_no)
+
+# make a single flat layer
+mainstems_flat_us <- map_df(mainstemsUS, ~.x$UT_flowlines, .id='site_no')
+
+```
+
+Make a quick plot:
+
+```{r quick-plot}
+#| error: false
+#| message: false
+
+#mapview
+mapview(mainstems_flat_us, zcol="site_no", layer.name="Flowlines") + mapview(nv_sample, zcol="site_no", legend=FALSE)
+
+```
+
+## Flow Network Work
+
+Let's pick one of our 5 and zoom in a bit, collect some additional info, and build a flow network map.
+
+```{r flow-vaa}
+#| echo: true
+#| eval: true
+#| message: false
+
+df_flow <- mainstems_flat_us %>% filter(site_no=="10329000")
+
+# get the nhd vaa attribs
+df_vaa <- subset_nhdplus(
+  comids = as.integer(df_flow$nhdplus_comid),
+  # if saving locally, save as gpkg
+  #output_file =here("data_raw/nhdplus_vaa.gpkg"),
+  #overwrite = TRUE, 
+  nhdplus_data = "download",
+  flowline_only = FALSE,
+  status = TRUE,
+  return_data = TRUE)
+
+
+```
+
+Now we can use `nhdplusTools` to get start and end nodes, and create a flow network.
+
+```{r starts}
+#| echo: true
+#| eval: true
+#| message: false
+#| warning: false
+
+starts <- get_node(df_vaa$NHDFlowline_Network, "start") %>%
+  mutate(hydroseq=df_vaa$NHDFlowline_Network$hydroseq) %>% 
+  arrange(hydroseq) %>% 
+  mutate(us_ord = rev(seq(1:nrow(.))))
+
+```
+
+Here we can grab midpoints.
+
+```{r midpoints}
+#| echo: true
+#| eval: true
+#| message: false
+#| warning: false
+
+midpts <- st_point_on_surface(df_vaa$NHDFlowline_Network)
+
+```
+
+### Quick maps
+
+```{r mapview1}
+#| echo: true
+#| eval: true
+#| message: false
+
+mapview(starts, zcol="hydroseq", legend=FALSE, layer.name="Starts") +
+  mapview(df_vaa$NHDFlowline_Network, color="steelblue", legend=FALSE) + mapview(midpts, col.regions="gray", cex=3)
+
+```
+
+```{r tmap1}
+
+m1 <- tm_shape(df_vaa$CatchmentSP) + tm_polygons(alpha = 0.3,col ="gray", 
+        title="NHD Catchments") + 
+  tm_shape(df_vaa$NHDFlowline_Network %>% filter(ftype!="CanalDitch")) + tm_lines(col = "blue2", title.col ="Streams only") +
+  tm_compass() + tm_scale_bar() + 
+  tm_layout(frame = FALSE)
+
+m1  
+
+```
+
+## Make a Network Upstream/Downstream
+
+```{r}
+# get matrix
+up_down_df <-
+  midpts %>% st_drop_geometry() %>% 
+  select(up = hydroseq,
+         down = dnhydroseq) %>%
+  # Can make downstream end ZERO
+  mutate(down = case_when(
+   up == 800003461 ~ 0, # this is OUTLET
+   TRUE ~ down)) %>%
+  filter(!is.na(down)) # make sure no NAs
+
+# make igraph
+df_inet <- igraph::graph_from_data_frame(d=up_down_df, vertices=NULL, directed=T) 
+class(df_inet)
+df_inet
+plot(df_inet, edge.arrow.size=.5, vertex.label.color="black", vertex.label.dist=1, vertex.size=5, edge.color="orange", vertex.color="gray50")
+
+```
+
+### Make Interactive Network
+
+```{r igraph}
+#| message: false
+#| echo: false
+
+
+simpleNetwork(up_down_df, 
+              Source = "up", Target = "down", height = "400px",
+              width = "400px", 
+              fontSize = 16, 
+              fontFamily = "Roboto Condensed",
+              nodeColour = "skyblue", 
+              linkColour = "white",
+              opacity = 0.9, zoom = TRUE, charge = -40)
+```
+
+### Sort and Split
+
+```{r}
+
+# get to and from comid
+flownet <- get_tocomid(df_vaa$NHDFlowline_Network, return_dendritic = TRUE, missing = 0, add = TRUE) %>%
+  select(comid, tocomid, fromnode, tonode, hydroseq, dnhydroseq, ftype, fcode, lengthkm, levelpathi, totdasqkm, terminalfl, startflag, terminalpa, divergence) 
+
+# now sort
+flownet_sort <- get_sorted(flownet, split = TRUE)
+# if dendritic or different Terminal groups exist, use split = TRUE
+
+# add sort_order
+flownet_sort['sort_order'] <- 1:nrow(flownet_sort)
+
+# preview
+mapview(flownet_sort, zcol="sort_order", layer.name="Revised Sorted", legend=T) + 
+  mapview(flownet_sort, zcol="dnhydroseq", layer.name="DS Hydroseq", legend=F)
+
+# arbolatesum
+flownet_sort[["arbolatesum"]] <- calculate_arbolate_sum(
+  dplyr::select(flownet_sort,
+                ID = comid, 
+                toID = tocomid, length = lengthkm))
+
+# plot based on upstream flowpath
+plot(sf::st_geometry(flownet_sort), lwd = flownet_sort$arbolatesum / 20)
+
+```
+
+
+
+```{r}
+#| echo: false
+#| eval: false
+
+# plot of total drainage area
+fm1 <- tm_shape(flownet_sort) +
+  tm_lines(lwd="totdasqkm", col="steelblue", title.col = "Total Drainage\nArea (sqkm)") +
+  tm_compass() + tm_scale_bar() + 
+  tm_layout(frame = FALSE,
+            legend.show = TRUE,
+            legend.position = c("left", "top"))
+
+fm1
+```
+
