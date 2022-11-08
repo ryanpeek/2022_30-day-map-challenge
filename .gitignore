@@ -47,7 +47,7 @@ docs/*files/*
 data_raw/*gdb
 data_raw/eu_rivers_v10.zip
 data_raw/*pdf
-
+sndbox/*
 # odds and ends
 ~*.docx
 ~*.xlsx
