@@ -1,0 +1,100 @@
+---
+title: "2022-11-08 Raster"
+date-modified: "*Updated `r Sys.Date()`*"
+format: 
+  html:
+    code-overflow: wrap
+    theme: darkly # slate lux materia sketchy darkly
+editor_options: 
+  chunk_output_type: console
+---
+
+30 Day Map Challenge for 2022. See [here](https://30daymapchallenge.com) for info.
+
+## Raster (Day 08)
+
+Get EDDI raster.
+
+### Libraries
+
+```{r load-libraries}
+suppressPackageStartupMessages({
+  library(here);
+  library(mapview);
+  library(terra);
+  library(elevatr);
+  library(sf);
+  library(tmap);
+  library(dplyr);
+  library(glue);
+  library(viridis);
+  library(ggplot2);
+  library(ggthemes)
+})
+```
+
+### Get Data
+
+First get the EDDI data
+
+```{r get-data}
+#| echo: true
+#| eval: true
+#| message: false
+#| results: hide
+
+# Date Parameters
+year <- 2022
+span <- "09mn"
+date <- "20221030"
+
+# Download EDDI data: STARS -----------------------------------------------
+
+library(stars)
+
+# read EDDI from link
+e1 <- stars::read_stars(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+
+stars::st_dimensions(e1)
+class(e1)
+
+# plot
+ggplot() + geom_stars(data=e1) +
+  scale_fill_viridis("EDDI", option = "A")+
+  theme_map() +
+  theme(legend.background = element_rect(fill = "transparent"),
+        legend.key.size = unit(0.7, "cm"),
+        legend.position = c(0.85,0.1),
+        legend.spacing.x = unit(0.05,"cm"),
+        legend.title = element_text(color="white"),
+        legend.text = element_text(size=8, family="Roboto Condensed", colour = "white")) +
+  labs(title="EDDI Drought Metric",
+       subtitle = glue("{date}, {span}"))
+
+# Download EDDI data: terra -----------------------------------------------
+
+library(terra)
+
+# read EDDI from link
+e1 <- terra::rast(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+
+res(e1)
+cat(crs(e1), "\n")
+
+e2 <- raster(e1)
+class(e1)
+class(e2)
+
+# plot
+plot(e1, col=viridis::magma(n = 40)) # terra version nicer
+
+# to plot raster use "gplot" requires rasterVis
+rasterVis::gplot(e1) + geom_tile(aes(fill = value)) +
+  #facet_wrap(~ variable) +
+  scale_fill_viridis("EDDI", option = "A") +
+  coord_equal()
+
+# or mapview a raster
+mapview(e2, layer.name=glue("EDDI {date}_{span}"))
+
+```
