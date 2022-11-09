@@ -20,26 +20,127 @@ Get EDDI raster.
 ```{r load-libraries}
 suppressPackageStartupMessages({
   library(here);
-  library(mapview);
-  library(terra);
-  library(elevatr);
+  library(tigris);
   library(sf);
-  library(tmap);
+  library(stars);
+  library(patchwork);
   library(dplyr);
   library(glue);
   library(viridis);
+  library(systemfonts);
   library(ggplot2);
-  library(ggthemes)
+  library(ggthemes);
+  library(hrbrthemes)
 })
 ```
 
 ### Get Data
 
-First get the EDDI data
+First get the EDDI data for different time durations:
 
-```{r get-data}
+#### 1 week
+
+```{r get-data-1wk}
 #| echo: true
-#| eval: true
+#| eval: false
+#| message: false
+#| results: hide
+
+# Date Parameters
+year <- 2022
+span <- "01wk"
+date <- "20221030"
+
+# Download EDDI data: STARS -----------------------------------------------
+
+# read EDDI from link
+e1 <- stars::read_stars(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+e1 # to check range and attributes
+# stars::st_dimensions(e1)
+# class(e1)
+
+# get CA outline and crop
+ca <- tigris::states() %>% tigris::filter_state("California") %>% 
+  st_transform(4326)
+st_crs(ca) == st_crs(e1)
+e1 <- st_set_crs(e1, 4326)
+st_crs(e1)==st_crs(ca)
+e1_ca <- e1[ca,]
+
+# set font
+fnt <- "Roboto Slab"
+
+# plot
+(g1 <- ggplot() + geom_stars(data=e1_ca) +
+  scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
+  theme_map(base_family = fnt, base_size = 14) +
+  theme(
+    title = element_text(color="white"),
+    legend.background = element_rect(fill = "transparent"),
+    legend.key.size = unit(0.7, "cm"),
+    legend.position = c(0.75,0.6),
+    legend.spacing.x = unit(0.05,"cm"),
+    legend.title = element_text(color="white"),
+    legend.text = element_text(size=12, colour = "white"),
+    plot.caption = element_text(size=10, color="white"),
+    plot.background = element_rect(fill = "black"))+
+  labs(#title="Evaporative Drought Demand Index (EDDI)",
+       subtitle = glue("End Date: {date}, span: {span}")))
+
+#ggsave(g1, filename = here(glue("figs/eddi_{date}_{span}_stars.png")), width = 8.5, height = 11, dpi=300)
+```
+
+#### 1 Month
+
+```{r get-data-1mn}
+#| echo: true
+#| eval: false
+#| message: false
+#| results: hide
+
+# Date Parameters
+year <- 2022
+span <- "01mn"
+date <- "20221030"
+
+# Download EDDI data: STARS -----------------------------------------------
+
+# read EDDI from link
+e2 <- stars::read_stars(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+
+# get CA outline and crop
+st_crs(ca) == st_crs(e2)
+e2 <- st_set_crs(e2, 4326)
+st_crs(ca) == st_crs(e2)
+e2_ca <- e2[ca,]
+
+# set font
+fnt <- "Roboto Slab"
+
+# plot
+(g2 <- ggplot() + geom_stars(data=e2_ca) +
+  scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
+  theme_map(base_family = fnt, base_size = 14) +
+  theme(
+    title = element_text(color="white"),
+    legend.background = element_rect(fill = "transparent"),
+    legend.key.size = unit(0.7, "cm"),
+    legend.position = c(0.75,0.6),
+    legend.spacing.x = unit(0.05,"cm"),
+    legend.title = element_text(color="white"),
+    legend.text = element_text(size=12, colour = "white"),
+    plot.caption = element_text(size=10, color="white"),
+    plot.background = element_rect(fill = "black"))+
+  labs(subtitle = glue("End Date: {date}, span: {span}")))
+
+#ggsave(g2, filename = here(glue("figs/eddi_{date}_{span}_stars.png")), width = 8.5, height = 11, dpi=300)
+```
+
+#### 9 Months
+
+```{r get-data-9mn}
+#| echo: true
+#| eval: false
 #| message: false
 #| results: hide
 
@@ -50,40 +151,85 @@ date <- "20221030"
 
 # Download EDDI data: STARS -----------------------------------------------
 
-library(stars)
-
 # read EDDI from link
-e1 <- stars::read_stars(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+e3 <- stars::read_stars(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
 
-stars::st_dimensions(e1)
-class(e1)
+# get CA outline and crop
+st_crs(ca) == st_crs(e3)
+e3 <- st_set_crs(e3, 4326)
+st_crs(ca) == st_crs(e3)
+e3_ca <- e3[ca,]
+
+# set font
+fnt <- "Roboto Slab"
 
 # plot
-ggplot() + geom_stars(data=e1) +
-  scale_fill_viridis("EDDI", option = "A")+
-  theme_map() +
-  theme(legend.background = element_rect(fill = "transparent"),
+(g3 <- ggplot() + geom_stars(data=e3_ca) +
+    scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
+    theme_map(base_family = fnt, base_size = 14) +
+    ggrepel::geom_label_repel(aes(x = -120.5, y = 36,
+        label = "Indication of longer persistence\n    of high evaporative demand \n    (extreme drought)"), 
+        family=fnt, size=2.5, box.padding = 0.5, 
+        segment.color="gray70",
+        min.segment.length = 0.4, color="black",
+        nudge_x = -0.9, nudge_y = -5)+
+      theme(
+        title = element_text(color="white"),
+        legend.background = element_rect(fill = "transparent"),
         legend.key.size = unit(0.7, "cm"),
-        legend.position = c(0.85,0.1),
+        legend.position = c(0.75,0.6),
         legend.spacing.x = unit(0.05,"cm"),
         legend.title = element_text(color="white"),
-        legend.text = element_text(size=8, family="Roboto Condensed", colour = "white")) +
-  labs(title="EDDI Drought Metric",
-       subtitle = glue("{date}, {span}"))
+        legend.text = element_text(size=12, colour = "white"),
+        plot.caption = element_text(size=10, color="white"),
+        plot.background = element_rect(fill = "black"))+
+        labs(subtitle = glue("End Date: {date}, span: {span}"),
+             caption = "Data source: <https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/>"))
+  
+#ggsave(g3, filename = here(glue("figs/eddi_{date}_{span}_stars.png")), width = 8.5, height = 11, dpi=300)
+```
+
+### Stitch Together
+
+```{r patch-plots}
+#| eval: false
+#| echo: true
+#| message: false
+#| results: hide
+
+gpatch <- g1 + g2 + g3 + patchwork::plot_layout(guides="collect")+
+  patchwork::plot_annotation(theme = hrbrthemes::theme_modern_rc(),
+    title="Comparing Timescales: 1 week, 1 month, 9 months",
+    subtitle="Evaporative Drought Demand Index (EDDI): metric of the 'thirst' of the atmosphere")
+
+ggsave(gpatch, filename=here("figs/20221108_eddi_time_interval_comparison.png"), 
+       #width = 11, height = 6, 
+       dpi=300, bg="black")
+```
+
+::: {.column-page}
+
+![](images/20221108_eddi_time_interval_comparison.png "Title: Comparison of evaporative demand metric at different timescales"){fig-alt="Comparison of 3 different timescales for EDDI metric" fig-align="center"}
+
+:::
+
+```{r terra}
+#| eval: false
+#| echo: false
 
 # Download EDDI data: terra -----------------------------------------------
 
 library(terra)
 
 # read EDDI from link
-e1 <- terra::rast(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
+e2 <- terra::rast(glue("https://downloads.psl.noaa.gov/Projects/EDDI/CONUS_archive/data/{year}/EDDI_ETrs_{span}_{date}.asc"))
 
-res(e1)
-cat(crs(e1), "\n")
+res(e2)
+cat(crs(e2), "\n")
 
-e2 <- raster(e1)
-class(e1)
+e2 <- raster::raster(e2)
 class(e2)
+crs(e2)
 
 # plot
 plot(e1, col=viridis::magma(n = 40)) # terra version nicer
@@ -95,6 +241,6 @@ rasterVis::gplot(e1) + geom_tile(aes(fill = value)) +
   coord_equal()
 
 # or mapview a raster
-mapview(e2, layer.name=glue("EDDI {date}_{span}"))
+mapview::mapview(e2, layer.name=glue("EDDI {date}_{span}"))
 
 ```
