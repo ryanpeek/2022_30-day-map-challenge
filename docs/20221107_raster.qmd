@@ -11,7 +11,7 @@ editor_options:
 
 30 Day Map Challenge for 2022. See [here](https://30daymapchallenge.com) for info.
 
-## Raster (Day 08)
+## Raster (Day 07)
 
 Get EDDI raster.
 
@@ -73,7 +73,7 @@ fnt <- "Roboto Slab"
 # plot
 (g1 <- ggplot() + geom_stars(data=e1_ca) +
   scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
-  theme_map(base_family = fnt, base_size = 14) +
+  theme_map(base_family = fnt, base_size = 12) +
   theme(
     title = element_text(color="white"),
     legend.background = element_rect(fill = "transparent"),
@@ -120,7 +120,7 @@ fnt <- "Roboto Slab"
 # plot
 (g2 <- ggplot() + geom_stars(data=e2_ca) +
   scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
-  theme_map(base_family = fnt, base_size = 14) +
+  theme_map(base_family = fnt, base_size = 12) +
   theme(
     title = element_text(color="white"),
     legend.background = element_rect(fill = "transparent"),
@@ -166,10 +166,10 @@ fnt <- "Roboto Slab"
 # plot
 (g3 <- ggplot() + geom_stars(data=e3_ca) +
     scale_fill_viridis("EDDI", option = "A", na.value="black", limits=c(-2.2,2.2))+
-    theme_map(base_family = fnt, base_size = 14) +
+    theme_map(base_family = fnt, base_size = 12) +
     ggrepel::geom_label_repel(aes(x = -120.5, y = 36,
         label = "Indication of longer persistence\n    of high evaporative demand \n    (extreme drought)"), 
-        family=fnt, size=2.5, box.padding = 0.5, 
+        family=fnt, size=2.1, box.padding = 0.5, 
         segment.color="gray70",
         min.segment.length = 0.4, color="black",
         nudge_x = -0.9, nudge_y = -5)+
