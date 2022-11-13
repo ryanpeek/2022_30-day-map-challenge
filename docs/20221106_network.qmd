@@ -38,7 +38,7 @@ suppressPackageStartupMessages({
 })
 ```
 
-### Get Data
+### Get Data: NV
 
 First get info on what sites have flow info in NV.
 
@@ -59,22 +59,95 @@ nv <- tigris::states(progress_bar = FALSE) %>% filter(NAME=="Nevada")
 # make into sf
 nv_sf <- st_as_sf(NV_sites, 
                   coords = c("dec_long_va", "dec_lat_va"),
-                  crs = 4269, remove=FALSE)
+                  crs = 4269, remove=FALSE) %>% 
+  rename(X_lon = dec_long_va, Y_lat = dec_lat_va)
+
+# use MASS to get density
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+# add density
+nv_sf <- nv_sf %>% 
+  mutate(density = get_density(X_lon, Y_lat, n=30))
+
 # map
 ggplot() +
-    geom_sf(data = nv) +
-    geom_sf(data = nv_sf, pch=21, fill="steelblue") + 
-    xlab(NULL)+
-    ylab(NULL)+
-    theme_minimal() +
-    theme(plot.title = element_text(hjust = 0.5),
-          plot.subtitle = element_text(hjust = 0.5)) +
-    north(nv_sf, symbol=1, location="bottomleft") +
-    scalebar(nv,
-             dist=100, dist_unit="mi", st.size = 3,
-             transform=TRUE, model="WGS84")
+  geom_sf(data = nv) +
+  geom_sf(data = nv_sf, pch=21, fill="steelblue") +
+  geom_hex(data=nv_sf, aes(x=X_lon, y=Y_lat, group=density, fill= density), bins=10, binwidth=c(0.2,0.2)) +
+  scale_fill_viridis(option = "B")+
+  xlab(NULL)+
+  ylab(NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  north(nv_sf, symbol=1, location="bottomleft") +
+  scalebar(nv,
+           dist=100, dist_unit="mi", st.size = 3,
+           transform=TRUE, model="WGS84")
 
 ```
+
+### Get data: CA
+
+First get info on what sites have flow info in CA.
+
+```{r get-data-ca}
+#| echo: true
+#| eval: true
+#| message: false
+#| results: hide
+
+library(ggsn)
+# get data on sites 
+CA_sites <- whatNWISsites(stateCd = "CA", 
+                          parameterCd = "00060")
+
+# where?
+ca <- tigris::states(progress_bar = FALSE) %>% filter(NAME=="California")
+
+# make into sf
+ca_sf <- st_as_sf(CA_sites, 
+                  coords = c("dec_long_va", "dec_lat_va"),
+                  crs = 4269, remove=FALSE) %>% 
+  rename(X_lon = dec_long_va, Y_lat = dec_lat_va)
+
+# use MASS to get density
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+# add density
+ca_sf <- ca_sf %>% 
+  mutate(density = get_density(X_lon, Y_lat, n=30))
+
+# map
+ggplot() +
+  geom_sf(data = ca) +
+  geom_sf(data = ca_sf, pch=21, fill="steelblue") +
+  geom_hex(data=ca_sf, aes(x=X_lon, y=Y_lat, group=density, fill= density), bins=10, binwidth=c(0.2,0.2)) +
+  scale_fill_viridis(option = "B")+
+  xlab(NULL)+
+  ylab(NULL)+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  north(nv_sf, symbol=1, location="bottomleft") +
+  scalebar(nv,
+           dist=100, dist_unit="mi", st.size = 3,
+           transform=TRUE, model="WGS84")
+
+```
+
 
 Now we can randomly sample 5 gages and pull the stream data for each.
 
