@@ -1,0 +1,105 @@
+---
+title: "2022-11-13 5 minute map!"
+date-modified: "*Updated `r Sys.Date()`*"
+format: 
+  html:
+    code-overflow: wrap
+    theme: materia
+editor_options: 
+  chunk_output_type: console
+---
+
+30 Day Map Challenge for 2022. See [here](https://30daymapchallenge.com) for info.
+
+## Five Minute Map! (Day 13)
+
+Mapview something quickly with SF? or plot river flows and centroid timing?
+
+### Libraries
+
+```{r load-libraries}
+suppressPackageStartupMessages({
+  library(here);
+  library(dataRetrieval)
+  library(mapview);
+  library(sf);
+  library(tmap);
+  library(dplyr);
+  library(ggplot2);
+  library(ggthemes);
+  library(fs);
+  library(viridis);
+})
+```
+
+### Get Data
+
+```{r get-data-ca}
+
+# get states
+states <- tigris::states(progress_bar = FALSE) %>% filter(NAME %in% c("Nevada", "California", "Oregon", "Arizona"))
+
+```
+
+
+```{r get-gage-dat}
+
+#library(ggsn)
+
+# get data on USGS sites for a site
+get_state_sites_sf <- function(state, param){
+  dat <- whatNWISsites(
+    stateCd = c(state),
+    parameterCd = param) %>%
+    st_as_sf(., 
+             coords = c("dec_long_va", "dec_lat_va"),
+             crs = 4269, remove=FALSE) %>% 
+  rename(X_lon = dec_long_va, Y_lat = dec_lat_va)
+}
+
+# loop through
+dats <- purrr::map(c("CA","NV", "OR","AZ"),
+                   ~get_state_sites_sf(.x, "00060"))
+
+# flatten
+dats_sf <- purrr::set_names(dats, c("CA", "NV", "OR", "AZ")) %>% 
+  purrr::map_df(., ~.x, .id='state')
+
+# double check
+table(dats_sf$state)
+
+# use MASS to get density
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+# add density
+dats_sf <- dats_sf %>% 
+  mutate(density = get_density(X_lon, Y_lat, n=100))
+
+# map
+ggplot() +
+  geom_sf(data = states, col="gray20", fill="gray80", lwd=6) +
+  geom_hex(data=dats_sf, aes(x=X_lon, y=Y_lat, group=density, fill=density), bins=10, binwidth=c(0.2,0.2)) +
+  scale_fill_viridis("Density",option = "B")+
+  xlab(NULL)+
+  ylab(NULL)+
+  labs(subtitle = "Density of USGS Flow (00060) Gages",
+       caption = "Data source: USGS {dataRetrieval} \n Github: ryanpeek/30daymap_2022 | @riverpeek") +
+  theme_minimal(base_family = "Roboto Slab") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  north(dats_sf, symbol=1, location="bottomleft")
+  #scalebar(states,
+  #         dist=100, dist_unit="mi", st.size = 3,
+  #         transform=TRUE, model="WGS84")
+
+ggsave(filename = here::here("figs/20221113_density_of_usgs_westcoast.png"),
+       dpi=300, width = 8, height = 10, bg = "white")
+
+```
+
